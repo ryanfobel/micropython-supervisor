@@ -50,6 +50,18 @@ class BaseService:
         except OSError:
             return ''
 
+    def start(self):
+        print('Starting %s.' % self.name)
+        lock = _thread.allocate_lock()
+        with lock:
+            self._state = 'running'
+
+    def stop(self):
+        print('Stopping %s.' % self.name)
+        lock = _thread.allocate_lock()
+        with lock:
+            self._state = 'stopped'
+
     async def main(self):
         while True:
             if self._state == 'running':
@@ -100,18 +112,12 @@ class Service(BaseService):
         return {name: (service._state, service.version) for name, service in self._services.items()}
 
     def stop_all_services(self):
-        for name, service in self._services.items():
-            print('Stopping %s.' % name)
-            lock = _thread.allocate_lock()
-            with lock:
-                service._state = 'stopped'
+        for service in self._services.values():
+            service.stop()
 
     def start_all_services(self):
-        for name, service in self._services.items():
-            print('Starting %s.' % name)
-            lock = _thread.allocate_lock()
-            with lock:
-                service._state = 'running'
+        for service in self._services.values():
+            service.start()
 
     # This function runs continuously
     async def loop(self):
