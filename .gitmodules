@@ -1,3 +1,0 @@
-[submodule "services/sample"]
-	path = services/sample
-	url = https://github.com/ryanfobel/sample-micropython-app
