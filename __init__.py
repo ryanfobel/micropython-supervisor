@@ -37,6 +37,13 @@ class BaseService:
             print('No env defined for %s' % self.name)
 
     @property
+    def state(self):
+        lock = _thread.allocate_lock()
+        with lock:
+            state = self._state
+        return state
+
+    @property
     def env(self):
         try:
             return json.load(open('envs/%s/env.json' % self.name, 'r'))
@@ -109,7 +116,7 @@ class Service(BaseService):
 
     @property
     def status(self):
-        return {name: (service._state, service.version) for name, service in self._services.items()}
+        return {name: (service.state, service.version) for name, service in self._services.items()}
 
     def stop_all_services(self):
         for service in self._services.values():
@@ -121,5 +128,5 @@ class Service(BaseService):
 
     # This function runs continuously
     async def loop(self):
-        print('[%s] state=%s' % (self.__module__, self._state))
+        print('[%s] state=%s' % (self.__module__, self.state))
         await asyncio.sleep(10)
