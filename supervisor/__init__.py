@@ -24,13 +24,13 @@ class Supervisor:
     def _init_services(self):
         # Get a list of all services
         for service in os.listdir('services'):
-            import sys
-            sys.path.append('services')
+            if service == '__init__.py':
+                continue
 
             # create new service
             exec('from %s import Service' % service, globals())
             self._services[service] = Service()
-            print('Initialized %s %s' % (self._services[service].__module__,
+            print('Initialized %s %s' % (self._services[service].name,
                                          self._services[service].version))
 
             # start the asyncio loop in a background thread
@@ -63,22 +63,26 @@ class Supervisor:
 
 class BaseService:
     def __init__(self):
+        self.name = self.__class__.__module__.split('.')[-1]
         self._loop = asyncio.get_event_loop()
         self._state = 'stopped'
         self._task = self.main()
         self._loop.create_task(self._task)
 
     def update(self):
-        service_env = json.load(open('services/%s/env.json' % self.__module__, 'r'))
-        o = OTAUpdater(service_env['GITHUB_URL'], module='services', main_dir=self.__module__)
+        o = OTAUpdater(self.env['GITHUB_URL'], module='services', main_dir=self.name)
         o.using_network(env['WIFI_SSID'], env['WIFI_PASSWORD'])
         o.check_for_update_to_install_during_next_reboot()
         o.download_and_install_update_if_available(env['WIFI_SSID'], env['WIFI_PASSWORD'])
 
     @property
+    def env(self):
+        return json.load(open('services/%s/env.json' % self.name, 'r'))
+
+    @property
     def version(self):
         try:
-            return open('services/%s/.version' % self.__module__, 'r').read()
+            return open('services/%s/.version' % self.name, 'r').read()
         except OSError:
             return ''
 
