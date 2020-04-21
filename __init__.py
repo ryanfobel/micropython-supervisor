@@ -39,7 +39,7 @@ class BaseService:
     @property
     def env(self):
         try:
-            return json.load(open('services/%s/env.json' % self.name, 'r'))
+            return json.load(open('envs/%s/env.json' % self.name, 'r'))
         except OSError:
             return {}
 
