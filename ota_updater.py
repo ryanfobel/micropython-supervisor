@@ -31,6 +31,9 @@ class OTAUpdater:
                 os.mkdir(self.update_path)
             with open(self.update_path + '/.version_on_reboot', 'w') as versionfile:
                 versionfile.write(latest_version)
+            return latest_version
+        else:
+            return None
 
     def download_and_install_update_if_available(self):
         if (self.update_path.split('/')[-1]) in os.listdir(self.modules_dir):
@@ -46,8 +49,7 @@ class OTAUpdater:
         self.rmtree(self.module_path)
         os.rename(self.update_path + '/.version_on_reboot', self.update_path + '/.version')
         os.rename(self.update_path, self.module_path)
-        print('Update installed (', latest_version, '), will reboot now')
-        machine.reset()
+        print('Update installed (', latest_version, ')')
 
     def apply_pending_updates_if_available(self):
         if (self.module_name + '_update') in os.listdir(self.modules_path):

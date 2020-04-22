@@ -154,6 +154,8 @@ class Service(BaseService):
 
     @using_network
     def _get_updates(self):
+        reboot_flag = False
+
         # Get a list of all services
         for service in os.listdir('services'):
             if service == '__init__.py' or service.startswith('.'):
@@ -169,14 +171,19 @@ class Service(BaseService):
                                remote_module_path=remote_module_path)
                 try:
                     gc.collect()
-                    o.check_for_update_to_install_during_next_reboot()
-                    gc.collect()
-                    o.download_and_install_update_if_available()
-                    gc.collect()
+                    if o.check_for_update_to_install_during_next_reboot():
+                        gc.collect()
+                        o.download_and_install_update_if_available()
+                        reboot_flag = True
+                    gc.collect()                    
                 except KeyError:
                     self.logger.error("Couldn't get update info.")
             else:
                 self.logger.error('No env defined for %s' % self.name)
+
+        if reboot_flag:
+            self.logger.info('Updates installed. Rebooting...')
+            machine.reset()
 
     def _init_services(self):
         # Get a list of all services
