@@ -121,15 +121,16 @@ class OTAUpdater:
     def download_all_files(self, root_url, version):
         file_list = self.http_client.get(root_url + '?ref=refs/tags/' + version)
         for file in file_list.json():
-            if file['type'] == 'file':
-                download_url = file['download_url']
-                download_path = self.update_path + '/' + file['path'].replace(self.remote_module_path + '/', '')
-                self.download_file(download_url.replace('refs/tags/', ''), download_path)
-            elif file['type'] == 'dir':
-                path = self.update_path + '/' + file['path'].replace(self.remote_module_path + '/', '')
-                os.mkdir(path)
-                self.download_all_files(root_url + '/' + file['name'], version)
-
+            if self.remote_module_path in file['path']:
+                if file['type'] == 'file':
+                    download_url = file['download_url']
+                    download_path = self.update_path + '/' + file['path'].replace(self.remote_module_path + '/', '')
+                    self.download_file(download_url.replace('refs/tags/', ''), download_path)
+                elif file['type'] == 'dir':
+                    if file['path'] != self.remote_module_path:
+                        path = self.update_path + '/' + file['path'].replace(self.remote_module_path + '/', '')
+                        os.mkdir(path)
+                    self.download_all_files(root_url + '/' + file['name'], version)
         file_list.close()
 
     def download_file(self, url, path):
