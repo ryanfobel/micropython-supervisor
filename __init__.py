@@ -55,13 +55,15 @@ class MQTTStream(io.IOBase):
 
 
 class BaseService():
+    logger = None
+
     def __init__(self):
         self.name = self.__class__.__module__.split('.')[-1]
         self._loop = asyncio.get_event_loop()
         self._state = 'stopped'
         self._task = self.main()
         self._loop.create_task(self._task)
-        self.logger = logging.getLogger(self.name)
+        type(self).logger = logging.getLogger(self.name)
 
     @property
     def state(self):
@@ -102,7 +104,7 @@ class BaseService():
 
     # This function runs continuously
     async def loop(self):
-        self.logger.info('[%s] state=%s' % (self.__module__, self.state))
+        self.logger.debug('state=%s' % self.state)
         await asyncio.sleep(10)
 
 
@@ -138,7 +140,7 @@ class Service(BaseService):
         self._log_stream = MQTTStream(self.mqtt, '%s/logging' % self.hardware_id)
 
         # make this the default log stream
-        logging.basicConfig(level=logging.INFO, stream=self._log_stream)
+        logging.basicConfig(level=logging.DEBUG, stream=self._log_stream)
 
         self._loop.create_task(self._process_mqtt_messages())
 
