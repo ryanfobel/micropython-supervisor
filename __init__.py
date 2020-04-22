@@ -9,12 +9,11 @@ from .ota_updater import OTAUpdater
 
 try:
     env = json.load(open('env.json', 'r'))
-    print(env)
 except:
     print('You must create an env.json file.')
 
 
-class BaseService:
+class BaseService():
     def __init__(self):
         self.name = self.__class__.__module__.split('.')[-1]
         self._loop = asyncio.get_event_loop()
@@ -25,8 +24,9 @@ class BaseService:
     def update(self):
         if 'GITHUB_URL' in self.env.keys():
             print('GITHUB_URL: %s' % self.env['GITHUB_URL'])
+            remote_module_path = self.env['PYTHON_MODULE_PATH'] if 'PYTHON_MODULE_PATH' in self.env else ''
             o = OTAUpdater(self.env['GITHUB_URL'], module_path='services/%s' % self.name,
-                           remote_dir='')
+                           remote_module_path=remote_module_path)
             o.using_network(env['WIFI_SSID'], env['WIFI_PASSWORD'])
             try:
                 o.check_for_update_to_install_during_next_reboot()
@@ -45,8 +45,12 @@ class BaseService:
 
     @property
     def env(self):
+        return self._env()
+
+    @classmethod
+    def _env(cls):
         try:
-            return json.load(open('envs/%s/env.json' % self.name, 'r'))
+            return json.load(open('envs/%s/env.json' % cls.__module__.split('.')[-1], 'r'))
         except OSError:
             return {}
 
@@ -76,6 +80,11 @@ class BaseService:
             else:
                 await asyncio.sleep(1)
 
+    # This function runs continuously
+    async def loop(self):
+        print('[%s] state=%s' % (self.__module__, self.state))
+        await asyncio.sleep(10)
+
 
 class Service(BaseService):
     # Setup
@@ -95,15 +104,17 @@ class Service(BaseService):
             if service == '__init__.py' or service.startswith('.'):
                 continue
 
-            if service == 'supervisor':
-                self._services[service] = self
-            else:
-                # create new service
-                exec('import %s' % service, locals())
-                self._services[service] = locals()[service].Service()
-
-            print('Initialized %s %s' % (self._services[service].name,
-                                        self._services[service].version))
+            try:
+                if service == 'supervisor':
+                    self._services[service] = self
+                else:
+                    # create new service
+                    exec('import %s' % service, locals())
+                    self._services[service] = locals()[service].Service()
+                print('Initialized %s %s' % (self._services[service].name,
+                                             self._services[service].version))
+            except Exception as e:
+                print('Failed to initialize %s: %s' % (service, e))
 
         # start the asyncio loop in a background thread
         _thread.start_new_thread(self._loop.run_forever, tuple())
@@ -125,8 +136,3 @@ class Service(BaseService):
     def start_all_services(self):
         for service in self._services.values():
             service.start()
-
-    # This function runs continuously
-    async def loop(self):
-        print('[%s] state=%s' % (self.__module__, self.state))
-        await asyncio.sleep(10)

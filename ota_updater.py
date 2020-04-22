@@ -9,10 +9,10 @@ import machine
 
 class OTAUpdater:
 
-    def __init__(self, github_repo, module_path, remote_dir=''):
+    def __init__(self, github_repo, module_path, remote_module_path=''):
         self.http_client = HttpClient()
         self.github_repo = github_repo.rstrip('/').replace('https://github.com', 'https://api.github.com/repos')
-        self.remote_dir = remote_dir
+        self.remote_module_path = remote_module_path
         self.module_path = module_path
         self.modules_dir = '/'.join(module_path.split('/')[:-1])
         self.module_name = module_path.split('/')[-1]
@@ -87,7 +87,7 @@ class OTAUpdater:
         if latest_version > current_version:
             print('Updating...')
             os.mkdir(self.update_path)
-            self.download_all_files(self.github_repo + '/contents/' + self.remote_dir, latest_version)
+            self.download_all_files(self.github_repo + '/contents/' + self.remote_module_path, latest_version)
             with open(self.update_path + '/.version', 'w') as versionfile:
                 versionfile.write(latest_version)
 
@@ -123,10 +123,10 @@ class OTAUpdater:
         for file in file_list.json():
             if file['type'] == 'file':
                 download_url = file['download_url']
-                download_path = self.update_path + '/' + file['path'].replace(self.remote_dir + '/', '')
+                download_path = self.update_path + '/' + file['path'].replace(self.remote_module_path + '/', '')
                 self.download_file(download_url.replace('refs/tags/', ''), download_path)
             elif file['type'] == 'dir':
-                path = self.update_path + '/' + file['path'].replace(self.remote_dir + '/', '')
+                path = self.update_path + '/' + file['path'].replace(self.remote_module_path + '/', '')
                 os.mkdir(path)
                 self.download_all_files(root_url + '/' + file['name'], version)
 
