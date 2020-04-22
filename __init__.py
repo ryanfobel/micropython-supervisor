@@ -246,6 +246,8 @@ class Service(BaseService):
     # This function runs continuously
     async def loop(self):
         self.logger.debug('state=%s' % self.state)
+
+        gc.collect()
         self.logger.info('gc.mem_free()=%s' % gc.mem_free())
 
         # Keep wifi connection alive
