@@ -18,18 +18,6 @@ class OTAUpdater:
         self.module_name = module_path.split('/')[-1]
         self.update_path = self.modules_dir + '/.' + self.module_name + '_update'
 
-    @staticmethod
-    def using_network(ssid, password):
-        import network
-        sta_if = network.WLAN(network.STA_IF)
-        if not sta_if.isconnected():
-            print('connecting to network...')
-            sta_if.active(True)
-            sta_if.connect(ssid, password)
-            while not sta_if.isconnected():
-                pass
-        print('network config:', sta_if.ifconfig())
-
     def check_for_update_to_install_during_next_reboot(self):
         current_version = self.get_version(self.module_path)
         latest_version = self.get_latest_version()
@@ -44,18 +32,16 @@ class OTAUpdater:
             with open(self.update_path + '/.version_on_reboot', 'w') as versionfile:
                 versionfile.write(latest_version)
 
-    def download_and_install_update_if_available(self, ssid, password):
+    def download_and_install_update_if_available(self):
         if (self.update_path.split('/')[-1]) in os.listdir(self.modules_dir):
             if '.version_on_reboot' in os.listdir(self.update_path):
                 latest_version = self.get_version(self.update_path, '.version_on_reboot')
                 print('New update found: ', latest_version)
-                self._download_and_install_update(latest_version, ssid, password)
+                self._download_and_install_update(latest_version)
         else:
             print('No new updates found...')
 
-    def _download_and_install_update(self, latest_version, ssid, password):
-        OTAUpdater.using_network(ssid, password)
-
+    def _download_and_install_update(self, latest_version):
         self.download_all_files(self.github_repo + '/contents/', latest_version)
         self.rmtree(self.module_path)
         os.rename(self.update_path + '/.version_on_reboot', self.update_path + '/.version')
