@@ -7,8 +7,47 @@ import gc
 import machine
 
 
-class OTAUpdater:
+class Version:
+    def __init__(self, version_string):
+        if not version_string[0] == 'v':
+            print('Invalid version number')
+            raise ValueError
 
+        version_list = version_string[1:].split('.')
+        self.major = version_list[0]
+        self.minor = 0
+        self.micro = 0
+        try:
+            self.minor = int(version_list[1])
+            self.micro = int(version_list[2])
+        except:
+            pass
+    
+    def __lt__(self, other):
+        if self.major < other.major:
+            return True
+        elif (self.major == other.major and
+              self.minor < other.minor):
+            return True
+        elif (self.major == other.major and
+              self.minor == other.minor and
+              self.micro < other.micro):
+            return True
+        return False
+
+    def __gt__(self, other):
+        return other < self
+
+    def __eq__(self, other):
+        if (self.major == other.major and
+            self.minor == other.minor and
+            self.micro == other.micro):
+            return True
+        else: 
+            return False
+
+
+class OTAUpdater:
     def __init__(self, github_repo, module_path, remote_module_path=''):
         self.http_client = HttpClient()
         self.github_repo = github_repo.rstrip('/').replace('https://github.com', 'https://api.github.com/repos')
@@ -25,7 +64,7 @@ class OTAUpdater:
         print('Checking version... ')
         print('\tCurrent version: ', current_version)
         print('\tLatest version: ', latest_version)
-        if latest_version > current_version:
+        if Version(latest_version) > Version(current_version):
             print('New version available, will download and install on next reboot')
             if self.update_path.split('/')[-1] not in os.listdir(self.modules_dir):
                 os.mkdir(self.update_path)
@@ -98,7 +137,7 @@ class OTAUpdater:
             version = f.read()
             f.close()
             return version
-        return '0.0'
+        return 'v0.0'
 
     def get_latest_version(self):
         latest_release = self.http_client.get(self.github_repo + '/releases/latest')
