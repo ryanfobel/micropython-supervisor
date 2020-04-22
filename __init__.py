@@ -14,7 +14,7 @@ from umqtt.robust import MQTTClient
 from .ota_updater import OTAUpdater
 
 try:
-    env = json.load(open('env.json', 'r'))
+    env = json.load(open('envs/env.json', 'r'))
 except OSError:
     print('You must create an env.json file.')
 
