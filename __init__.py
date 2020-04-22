@@ -219,3 +219,8 @@ class Service(BaseService):
     def start_all_services(self):
         for service in self._services.values():
             service.start()
+
+    async def loop(self):
+        self.logger.debug('state=%s' % self.state)
+        self.logger.info('gc.mem_free()=%s' % gc.mem_free())
+        await asyncio.sleep(60)
