@@ -48,9 +48,11 @@ class MQTTStream(io.IOBase):
         try:
             self.client.ping()
             self.client.publish(self.topic, buf)
-        # If we don't have an mqtt connection, print to stdout
         except OSError:
-            print(repr(buf))
+            pass
+
+        # Also print to stdout
+        print(buf)
         return len(buf)
 
 
@@ -123,18 +125,12 @@ class Service(BaseService):
         self._init_services()
         self.start_all_services()
 
-    @staticmethod
-    def print_log(topic, message):
-        print(message)
-
     @using_network
     def _init_mqtt(self):
         # Create an mqtt client
         self.mqtt = MQTTClient(self.hardware_id,
                                env['MQTT_HOST'])
         self.mqtt.connect()
-        self.mqtt.set_callback(self.print_log)
-        self.mqtt.subscribe('%s/logging' % self.hardware_id)
 
     def _init_logging(self):
         self._log_stream = MQTTStream(self.mqtt, '%s/logging' % self.hardware_id)
@@ -165,7 +161,7 @@ class Service(BaseService):
             service_env = get_env(service)
 
             if 'GITHUB_URL' in service_env.keys():
-                print('GITHUB_URL: %s' % service_env['GITHUB_URL'])
+                self.logger.info('GITHUB_URL: %s' % service_env['GITHUB_URL'])
                 remote_module_path = service_env['PYTHON_MODULE_PATH'] if 'PYTHON_MODULE_PATH' in service_env else ''
                 o = OTAUpdater(service_env['GITHUB_URL'], module_path='services/%s' % service,
                                remote_module_path=remote_module_path)
