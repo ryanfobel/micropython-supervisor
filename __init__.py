@@ -3,6 +3,8 @@ import os
 import gc
 import machine
 import io
+import time
+import network
 
 import uasyncio as asyncio
 import ujson as json
@@ -17,22 +19,33 @@ except OSError:
     print('You must create an env.json file.')
 
 
+wifi = network.WLAN(network.STA_IF)
+
+
 def get_env(module_name):
     return json.load(open('envs/%s/env.json' % module_name.split('.')[-1], 'r'))
 
 
-def using_network(func):
+def requires_network(func):
     def wrapper(*args, **kwargs):
-        import network
-        wifi = network.WLAN(network.STA_IF)
         if not wifi.isconnected():
-            print('connecting to network...')
+            print('Connecting to network...')
             wifi.active(True)
             wifi.connect(env['WIFI_SSID'], env['WIFI_PASSWORD'])
-            while not wifi.isconnected():
+
+            # Wait for the connection to be established
+            start_time = time.time()
+            while not wifi.isconnected() and time.time() - start_time < 5:
                 pass
-            print('network config:', wifi.ifconfig())
-        return func(*args, **kwargs)
+
+            if wifi.isconnected():
+                print('Network config:', wifi.ifconfig())
+
+        if wifi.isconnected():
+            return func(*args, **kwargs)
+        else:
+            print('Can\'t connect to network resource.')
+            return None
     return wrapper
 
 
@@ -120,17 +133,16 @@ class Service(BaseService):
         self._loop = asyncio.get_event_loop()
         self._services = {}
         self._init_mqtt()
+        self._mqtt_connect()
         self._init_logging()
         self._get_updates()
         self._init_services()
         self.start_all_services()
 
-    @using_network
     def _init_mqtt(self):
         # Create an mqtt client
         self.mqtt = MQTTClient(self.hardware_id,
                                env['MQTT_HOST'])
-        self.mqtt.connect()
 
     def _init_logging(self):
         self._log_stream = MQTTStream(self.mqtt, '%s/logging' % self.hardware_id)
@@ -143,12 +155,23 @@ class Service(BaseService):
     async def _process_mqtt_messages(self):
         while True:
             if self.state == 'running':
-                self.mqtt.check_msg()
+                try:
+                    self.mqtt.check_msg()
+                except:
+                    pass
                 await asyncio.sleep(0.1)
             else:
                 await asyncio.sleep(1)
 
-    @using_network
+    @requires_network
+    def _wifi_connect(self):
+        pass
+
+    @requires_network
+    def _mqtt_connect(self):
+        self.mqtt.connect()
+
+    @requires_network
     def _get_updates(self):
         reboot_flag = False
 
@@ -220,7 +243,13 @@ class Service(BaseService):
         for service in self._services.values():
             service.start()
 
+    # This function runs continuously
     async def loop(self):
         self.logger.debug('state=%s' % self.state)
         self.logger.info('gc.mem_free()=%s' % gc.mem_free())
+
+        # Keep wifi connection alive
+        if not wifi.isconnected():
+            self._wifi_connect()
+
         await asyncio.sleep(60)
