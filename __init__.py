@@ -161,7 +161,7 @@ class Service(BaseService):
             service_env = get_env(service)
 
             if 'GITHUB_URL' in service_env.keys():
-                self.logger.info('GITHUB_URL: %s' % service_env['GITHUB_URL'])
+                self.logger.info('GITHUB_URL=%s' % service_env['GITHUB_URL'])
                 remote_module_path = service_env['PYTHON_MODULE_PATH'] if 'PYTHON_MODULE_PATH' in service_env else ''
                 o = OTAUpdater(service_env['GITHUB_URL'], module_path='services/%s' % service,
                                remote_module_path=remote_module_path)
