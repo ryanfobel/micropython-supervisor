@@ -48,7 +48,7 @@ class MQTTStream(io.IOBase):
         try:
             self.client.ping()
             self.client.publish(self.topic, buf)
-        except OSError:
+        except:
             pass
 
         # Also print to stdout
