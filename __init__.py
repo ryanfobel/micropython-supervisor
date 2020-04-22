@@ -13,6 +13,10 @@ except:
     print('You must create an env.json file.')
 
 
+def get_env(module_name):
+    return json.load(open('envs/%s/env.json' % module_name.split('.')[-1], 'r'))
+
+
 class BaseService():
     def __init__(self):
         self.name = self.__class__.__module__.split('.')[-1]
@@ -20,21 +24,6 @@ class BaseService():
         self._state = 'stopped'
         self._task = self.main()
         self._loop.create_task(self._task)
-
-    def update(self):
-        if 'GITHUB_URL' in self.env.keys():
-            print('GITHUB_URL: %s' % self.env['GITHUB_URL'])
-            remote_module_path = self.env['PYTHON_MODULE_PATH'] if 'PYTHON_MODULE_PATH' in self.env else ''
-            o = OTAUpdater(self.env['GITHUB_URL'], module_path='services/%s' % self.name,
-                           remote_module_path=remote_module_path)
-            o.using_network(env['WIFI_SSID'], env['WIFI_PASSWORD'])
-            try:
-                o.check_for_update_to_install_during_next_reboot()
-                o.download_and_install_update_if_available(env['WIFI_SSID'], env['WIFI_PASSWORD'])
-            except KeyError:
-                print("Couldn't get update info.")
-        else:
-            print('No env defined for %s' % self.name)
 
     @property
     def state(self):
@@ -45,14 +34,7 @@ class BaseService():
 
     @property
     def env(self):
-        return self._env()
-
-    @classmethod
-    def _env(cls):
-        try:
-            return json.load(open('envs/%s/env.json' % cls.__module__.split('.')[-1], 'r'))
-        except OSError:
-            return {}
+        return get_env(self.__module__)
 
     @property
     def version(self):
@@ -92,10 +74,8 @@ class Service(BaseService):
         super().__init__()
         self._loop = asyncio.get_event_loop()
         self._services = {}
-        self._init_services()
-        gc.collect()
         self._get_updates()
-        gc.collect()
+        self._init_services()
         self.start_all_services()
 
     def _init_services(self):
@@ -116,14 +96,36 @@ class Service(BaseService):
             except Exception as e:
                 print('Failed to initialize %s: %s' % (service, e))
 
+        print('Start asyncio background thread.')
+
         # start the asyncio loop in a background thread
         _thread.start_new_thread(self._loop.run_forever, tuple())
 
     def _get_updates(self):
-        # TO DO: update supervisor
-        for name, service in self._services.items():
-            print('Check for updates to %s' % name)
-            service.update()
+        # Get a list of all services
+        for service in os.listdir('services'):
+            if service == '__init__.py' or service.startswith('.'):
+                continue
+
+            print('Check for updates to %s' % service)
+            service_env = get_env(service)
+
+            if 'GITHUB_URL' in service_env.keys():
+                print('GITHUB_URL: %s' % service_env['GITHUB_URL'])
+                remote_module_path = service_env['PYTHON_MODULE_PATH'] if 'PYTHON_MODULE_PATH' in service_env else ''
+                o = OTAUpdater(service_env['GITHUB_URL'], module_path='services/%s' % service,
+                            remote_module_path=remote_module_path)
+                o.using_network(env['WIFI_SSID'], env['WIFI_PASSWORD'])
+                try:
+                    gc.collect()
+                    o.check_for_update_to_install_during_next_reboot()
+                    gc.collect()
+                    o.download_and_install_update_if_available(env['WIFI_SSID'], env['WIFI_PASSWORD'])
+                    gc.collect()
+                except KeyError:
+                    print("Couldn't get update info.")
+            else:
+                print('No env defined for %s' % self.name)
 
     @property
     def status(self):
