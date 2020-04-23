@@ -63,7 +63,6 @@ class MQTTStream(io.IOBase):
 
     def write(self, buf):
         try:
-            self.client.ping()
             self.client.publish(self.topic, buf)
         except:
             pass
