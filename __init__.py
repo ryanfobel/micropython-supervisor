@@ -5,6 +5,7 @@ import machine
 import io
 import time
 import network
+import ntptime
 
 import uasyncio as asyncio
 import ujson as json
@@ -143,6 +144,7 @@ class Service(BaseService):
         self._get_updates()
         self._init_services()
         self.start_all_services()
+        self._loop.create_task(self._update_ntp())
 
     def _init_mqtt(self):
         # Create an mqtt client
@@ -180,6 +182,25 @@ class Service(BaseService):
                 await asyncio.sleep(0.1)
             else:
                 await asyncio.sleep(1)
+
+    async def _update_ntp(self):
+        def update():
+            try:
+                self.logger.info('Get NTP time')
+                logging._startup_time = ntptime.time() - time.time()
+            except:
+                pass
+
+        # Try every 10 s until we get an update
+        while not logging._startup_time:
+            update()
+            await asyncio.sleep(10)
+
+        # Afterwords, sync once per day
+        while True:
+            update()
+            await asyncio.sleep(60*60*24)
+
 
     @requires_network
     def _wifi_connect(self):
