@@ -23,7 +23,10 @@ wifi = network.WLAN(network.STA_IF)
 
 
 def get_env(module_name):
-    return json.load(open('envs/%s/env.json' % module_name.split('.')[-1], 'r'))
+    try:
+        return json.load(open('envs/%s/env.json' % module_name.split('.')[-1], 'r'))
+    except OSError:
+        return {}
 
 
 def requires_network(func):
