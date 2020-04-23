@@ -182,6 +182,8 @@ class Service(BaseService):
                 await asyncio.sleep(0.1)
             else:
                 await asyncio.sleep(1)
+            
+            gc.collect()
 
     async def _update_ntp(self):
         def update():
@@ -195,12 +197,13 @@ class Service(BaseService):
         while not logging._startup_time:
             update()
             await asyncio.sleep(10)
+            gc.collect()
 
         # Afterwords, sync once per day
         while True:
             await asyncio.sleep(60*60*24)
             update()
-
+            gc.collect()
 
     @requires_network
     def _wifi_connect(self):
@@ -286,9 +289,6 @@ class Service(BaseService):
     async def loop(self):
         self.logger.debug('state=%s' % self.state)
 
-        gc.collect()
-        self.logger.info('gc.mem_free()=%s' % gc.mem_free())
-
         # Keep wifi and mqtt connections alive
         try:
             self.mqtt.ping()
@@ -296,5 +296,8 @@ class Service(BaseService):
             # _mqtt_connect() requires wifi, so this will also reconnect wifi
             # if necessary
             self._mqtt_connect()
+
+        gc.collect()
+        self.logger.info('gc.mem_free()=%s' % gc.mem_free())
 
         await asyncio.sleep(60)
