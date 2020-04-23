@@ -6,11 +6,15 @@ import os
 import gc
 import machine
 
+import ulogging as logging
+
+logger = logging.getLogger('supervisor')
+
 
 class Version:
     def __init__(self, version_string):
         if not version_string[0] == 'v':
-            print('Invalid version number')
+            logger.error('Invalid version number')
             raise ValueError
 
         version_list = version_string[1:].split('.')
@@ -61,11 +65,11 @@ class OTAUpdater:
         current_version = self.get_version(self.module_path)
         latest_version = self.get_latest_version()
 
-        print('Checking version... ')
-        print('\tCurrent version: ', current_version)
-        print('\tLatest version: ', latest_version)
+        logger.info('Checking version... ')
+        logger.info('\tCurrent version: %s' % current_version)
+        logger.info('\tLatest version: %s' % latest_version)
         if Version(latest_version) > Version(current_version):
-            print('New version available, will download and install on next reboot')
+            logger.info('New version available, will download and install on next reboot')
             if self.update_path.split('/')[-1] not in os.listdir(self.modules_dir):
                 os.mkdir(self.update_path)
             with open(self.update_path + '/.version_on_reboot', 'w') as versionfile:
@@ -78,41 +82,41 @@ class OTAUpdater:
         if (self.update_path.split('/')[-1]) in os.listdir(self.modules_dir):
             if '.version_on_reboot' in os.listdir(self.update_path):
                 latest_version = self.get_version(self.update_path, '.version_on_reboot')
-                print('New update found: ', latest_version)
+                logger.info('New update found: %s' % latest_version)
                 self._download_and_install_update(latest_version)
         else:
-            print('No new updates found...')
+            logger.info('No new updates found...')
 
     def _download_and_install_update(self, latest_version):
         self.download_all_files(self.github_repo + '/contents/', latest_version)
         self.rmtree(self.module_path)
         os.rename(self.update_path + '/.version_on_reboot', self.update_path + '/.version')
         os.rename(self.update_path, self.module_path)
-        print('Update installed (', latest_version, ')')
+        logger.info('Update installed (%s)' % latest_version)
 
     def apply_pending_updates_if_available(self):
         if (self.module_name + '_update') in os.listdir(self.modules_path):
             if '.version' in os.listdir(self.update_path):
                 pending_update_version = self.get_version(self.update_path)
-                print('Pending update found: ', pending_update_version)
+                logger.info('Pending update found: %s' % pending_update_version)
                 self.rmtree(self.module_path)
                 os.rename(self.update_path, self.module_path)
-                print('Update applied (', pending_update_version, '), ready to rock and roll')
+                logger.info('Update applied (%s), ready to rock and roll' % pending_update_version)
             else:
-                print('Corrupt pending update found, discarding...')
+                logger.error('Corrupt pending update found, discarding...')
                 self.rmtree(self.update_path)
         else:
-            print('No pending update found')
+            logger.info('No pending update found')
 
     def download_updates_if_available(self):
         current_version = self.get_version(self.module_path)
         latest_version = self.get_latest_version()
 
-        print('Checking version... ')
-        print('\tCurrent version: ', current_version)
-        print('\tLatest version: ', latest_version)
+        logger.info('Checking version... ')
+        logger.info('\tCurrent version: %s' % current_version)
+        logger.info('\tLatest version: %s' % latest_version)
         if latest_version > current_version:
-            print('Updating...')
+            logger.info('Updating...')
             os.mkdir(self.update_path)
             self.download_all_files(self.github_repo + '/contents/' + self.remote_module_path, latest_version)
             with open(self.update_path + '/.version', 'w') as versionfile:
@@ -161,7 +165,7 @@ class OTAUpdater:
         file_list.close()
 
     def download_file(self, url, path):
-        print('\tDownloading: ', path)
+        logger.info('\tDownloading: %s' % path)
         with open(path, 'w') as outfile:
             try:
                 response = self.http_client.get(url)
@@ -258,7 +262,6 @@ class HttpClient:
                 s.write(data)
 
             l = s.readline()
-            # print(l)
             l = l.split(None, 2)
             status = int(l[1])
             reason = ''
@@ -268,7 +271,6 @@ class HttpClient:
                 l = s.readline()
                 if not l or l == b'\r\n':
                     break
-                # print(l)
                 if l.startswith(b'Transfer-Encoding:'):
                     if b'chunked' in l:
                         raise ValueError('Unsupported ' + l)
