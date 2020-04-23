@@ -104,6 +104,10 @@ class BaseService():
         except OSError:
             return ''
 
+    @property
+    def hardware_id(self):
+        return ''.join([hex(b)[-2:] for b in machine.unique_id()])
+
     def start(self):
         self.logger.info('Starting %s.' % self.name)
         lock = _thread.allocate_lock()
@@ -268,10 +272,6 @@ class Service(BaseService):
 
         # start the asyncio loop in a background thread
         _thread.start_new_thread(self._loop.run_forever, tuple())
-
-    @property
-    def hardware_id(self):
-        return ''.join([hex(b)[-2:] for b in machine.unique_id()])
 
     @property
     def status(self):
