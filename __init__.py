@@ -151,9 +151,14 @@ class Service(BaseService):
         self._loop.create_task(self._update_ntp())
 
     def _init_mqtt(self):
+        MQTT_USER = env['MQTT_USER'] if 'MQTT_USER' in env.keys() else None
+        MQTT_PASSWORD = env['MQTT_PASSWORD'] if 'MQTT_PASSWORD' in env.keys() else None
+
         # Create an mqtt client
         self.mqtt = MQTTClient(self.hardware_id,
-                               env['MQTT_HOST'])
+                               env['MQTT_HOST'],
+                               user=MQTT_USER,
+                               password=MQTT_PASSWORD)
 
     def _init_logging(self):
         LOG_LOCALLY = env['LOG_LOCALLY'] if 'LOG_LOCALLY' in env.keys() else True
