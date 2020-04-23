@@ -250,8 +250,12 @@ class Service(BaseService):
         gc.collect()
         self.logger.info('gc.mem_free()=%s' % gc.mem_free())
 
-        # Keep wifi connection alive
-        if not wifi.isconnected():
-            self._wifi_connect()
+        # Keep wifi and mqtt connections alive
+        try:
+            self.mqtt.ping()
+        except:
+            # _mqtt_connect() requires wifi, so this will also reconnect wifi
+            # if necessary
+            self._mqtt_connect()
 
         await asyncio.sleep(60)
