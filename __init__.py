@@ -52,9 +52,10 @@ def requires_network(func):
 # https://github.com/micropython/micropython/pull/3836
 # https://docs.micropython.org/en/latest/library/uio.html
 class MQTTStream(io.IOBase):
-    def __init__(self, client, topic):
+    def __init__(self, client, topic, print_output=True):
         self.client = client
         self.topic = topic
+        self.print_output = print_output
         super().__init__()
 
     def write(self, buf):
@@ -64,8 +65,10 @@ class MQTTStream(io.IOBase):
         except:
             pass
 
-        # Also print to stdout
-        print(buf)
+        # Also print to stdout?
+        if self.print_output:
+            print(buf)
+
         return len(buf)
 
 
@@ -145,10 +148,23 @@ class Service(BaseService):
                                env['MQTT_HOST'])
 
     def _init_logging(self):
-        self._log_stream = MQTTStream(self.mqtt, '%s/logging' % self.hardware_id)
+        LOG_LOCALLY = env['LOG_LOCALLY'] if 'LOG_LOCALLY' in env.keys() else True
+        self._log_stream = MQTTStream(self.mqtt,
+                                      '%s/logging' % self.hardware_id,
+                                      LOG_LOCALLY)
 
-        # make this the default log stream
-        logging.basicConfig(level=logging.DEBUG, stream=self._log_stream)
+        # Set the log level based on the global environment variable 'LOG_LEVEL'
+        log_level_string = env['LOG_LEVEL'] if 'LOG_LEVEL' in env.keys() else 'DEBUG'
+
+        # Convert the log level `string` to the right enum
+        LOG_LEVEL = logging.DEBUG
+        for x in ['DEBUG', 'INFO', 'WARNING', 'ERROR']:
+            if x == log_level_string:
+                LOG_LEVEL = eval('logging.%s' % x)
+                break
+
+        # Make this the default log stream
+        logging.basicConfig(level=LOG_LEVEL, stream=self._log_stream)
 
         self._loop.create_task(self._process_mqtt_messages())
 
