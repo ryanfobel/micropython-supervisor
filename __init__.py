@@ -198,8 +198,8 @@ class Service(BaseService):
 
         # Afterwords, sync once per day
         while True:
-            update()
             await asyncio.sleep(60*60*24)
+            update()
 
 
     @requires_network
