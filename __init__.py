@@ -237,8 +237,8 @@ class Service(BaseService):
                         o.download_and_install_update_if_available()
                         reboot_flag = True
                     gc.collect()                    
-                except KeyError:
-                    self.logger.error("Couldn't get update info.")
+                except Exception as e:
+                    self.logger.error("Couldn't get update info. %s" % repr(e))
             else:
                 self.logger.error('No env defined for %s' % self.name)
 
@@ -262,7 +262,7 @@ class Service(BaseService):
                 self.logger.info('Initialized %s %s' % (self._services[service].name,
                                              self._services[service].version))
             except Exception as e:
-                self.logger.error('Failed to initialize %s: %s' % (service, e))
+                self.logger.error('Failed to initialize %s: %s' % (service, repr(e)))
 
         self.logger.info('Start asyncio background thread.')
 
