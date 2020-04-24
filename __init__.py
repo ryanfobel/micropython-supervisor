@@ -6,6 +6,7 @@ import io
 import time
 import network
 import ntptime
+import sys
 
 import uasyncio as asyncio
 import ujson as json
@@ -56,23 +57,69 @@ def requires_network(func):
 # https://github.com/micropython/micropython/pull/3836
 # https://docs.micropython.org/en/latest/library/uio.html
 class MQTTStream(io.IOBase):
-    def __init__(self, client, topic, print_output=True):
+    def __init__(self, client, client_id, print_output=True):
         self.client = client
-        self.topic = topic
+        self.id = client_id
         self.print_output = print_output
+        self.buf = ''
+        self.service = ''
         super().__init__()
 
     def write(self, buf):
-        try:
-            self.client.publish(self.topic, buf)
-        except:
-            pass
+        lock = _thread.allocate_lock()
+        
+        with lock:
+            try:
+                self.buf += buf
+            except TypeError:
+                self.buf += buf.decode('utf-8')
 
-        # Also print to stdout?
-        if self.print_output:
-            print(buf)
+            return len(buf)
 
-        return len(buf)
+    async def _process_log_queue(self):
+        while True:
+            gc.collect()
+            
+            lock = _thread.allocate_lock()
+            
+            with lock:
+                # Send mqtt messages when we recieve a newline
+                while self.buf.find('\n') != -1:
+                    newline = self.buf.find('\n')
+                    line = self.buf[:newline]
+                    self.buf = self.buf[newline + 1:]
+
+                    if _startup_time:
+                        utc_time = '%d-%02d-%02dT%02d:%02d:%02d' % time.localtime(time.time() + _startup_time)[:6]
+                    else:
+                        utc_time = ''
+
+                    uptime = time.time()
+
+                    if len(line.split(':')) >= 3:
+                        level, self.service = line.split(':')[:2]
+                        message = json.dumps({'utc_time': utc_time,
+                                            'level': level,
+                                            'uptime': uptime,
+                                            'message': ''.join(line.split(':')[2:])})
+                        print_message = '[%s] %s - %s - %s - %s' % (self.service, utc_time, uptime, level, message)
+                        topic = '%s/%s/logging' % (self.id, self.service)
+                    else: # Traceback
+                        message = json.dumps({'message': line})
+                        print_message = line
+                        topic = '%s/%s/exceptions' % (self.id, self.service)
+
+                    try:
+                        self.client.publish(topic, message)
+                    except Exception as e:
+                        print(e)
+                        sys.print_exception(e, sys.stderr)
+
+                    # Also print to stdout?
+                    if self.print_output:
+                        print(print_message)
+
+            await asyncio.sleep(0.1)
 
 
 class BaseService():
@@ -80,10 +127,10 @@ class BaseService():
 
     def __init__(self):
         self.name = self.__class__.__module__.split('.')[-1]
-        self._loop = asyncio.get_event_loop()
+        self._asyncio_loop = asyncio.get_event_loop()
         self._state = 'stopped'
         self._task = self.main()
-        self._loop.create_task(self._task)
+        self._asyncio_loop.create_task(self._task)
         type(self)._logger = logging.getLogger(self.name)
 
     @property
@@ -140,7 +187,7 @@ class Service(BaseService):
         super().__init__()
         self.mqtt = None
         self._log_stream = None
-        self._loop = asyncio.get_event_loop()
+        self._asyncio_loop = asyncio.get_event_loop()
         self._services = {}
         self._init_mqtt()
         self._mqtt_connect()
@@ -148,7 +195,7 @@ class Service(BaseService):
         self._get_updates()
         self._init_services()
         self.start_all_services()
-        self._loop.create_task(self._update_ntp())
+        self._asyncio_loop.create_task(self._update_ntp())
 
     def _init_mqtt(self):
         MQTT_USER = env['MQTT_USER'] if 'MQTT_USER' in env.keys() else None
@@ -166,6 +213,8 @@ class Service(BaseService):
                                       '%s/logging' % self.hardware_id,
                                       LOG_LOCALLY)
 
+        self._asyncio_loop.create_task(self._log_stream._process_log_queue())
+
         # Set the log level based on the global environment variable 'LOG_LEVEL'
         log_level_string = env['LOG_LEVEL'] if 'LOG_LEVEL' in env.keys() else 'DEBUG'
 
@@ -179,7 +228,8 @@ class Service(BaseService):
         # Make this the default log stream
         logging.basicConfig(level=LOG_LEVEL, stream=self._log_stream)
 
-        self._loop.create_task(self._process_mqtt_messages())
+        self._asyncio_loop.create_task(self._process_mqtt_messages())
+
 
     async def _process_mqtt_messages(self):
         while True:
@@ -196,14 +246,21 @@ class Service(BaseService):
 
     async def _update_ntp(self):
         def update():
+            global _startup_time
             try:
-                logging._startup_time = ntptime.time() - time.time()
                 self._logger.info('Get NTP time')
-            except:
-                pass
+                
+                lock = _thread.allocate_lock()
+                with lock:
+                    _startup_time = ntptime.time() - time.time()
+
+                self._logger.info('_startup_time=%s' % _startup_time)
+            except Exception as e:
+                self._logger.warning(e)
+                sys.print_exception(e, self._log_stream)
 
         # Try every 10 s until we get an update
-        while not logging._startup_time:
+        while not _startup_time:
             update()
             await asyncio.sleep(10)
             gc.collect()
@@ -278,8 +335,8 @@ class Service(BaseService):
 
         self._logger.info('Start asyncio background thread.')
 
-        # start the asyncio loop in a background thread
-        _thread.start_new_thread(self._loop.run_forever, tuple())
+        # Start the asyncio loop in a background thread
+        _thread.start_new_thread(self._asyncio_loop.run_forever, tuple())
 
     @property
     def status(self):
