@@ -76,7 +76,7 @@ class MQTTStream(io.IOBase):
 
 
 class BaseService():
-    logger = None
+    _logger = None
 
     def __init__(self):
         self.name = self.__class__.__module__.split('.')[-1]
@@ -84,7 +84,7 @@ class BaseService():
         self._state = 'stopped'
         self._task = self.main()
         self._loop.create_task(self._task)
-        type(self).logger = logging.getLogger(self.name)
+        type(self)._logger = logging.getLogger(self.name)
 
     @property
     def state(self):
@@ -109,13 +109,13 @@ class BaseService():
         return ''.join([hex(b)[-2:] for b in machine.unique_id()])
 
     def start(self):
-        self.logger.info('Starting %s.' % self.name)
+        self._logger.info('Starting %s.' % self.name)
         lock = _thread.allocate_lock()
         with lock:
             self._state = 'running'
 
     def stop(self):
-        self.logger.info('Stopping %s.' % self.name)
+        self._logger.info('Stopping %s.' % self.name)
         lock = _thread.allocate_lock()
         with lock:
             self._state = 'stopped'
@@ -129,7 +129,7 @@ class BaseService():
 
     # This function runs continuously
     async def loop(self):
-        self.logger.debug('state=%s' % self.state)
+        self._logger.debug('state=%s' % self.state)
         await asyncio.sleep(60)
 
 
@@ -197,8 +197,8 @@ class Service(BaseService):
     async def _update_ntp(self):
         def update():
             try:
-                self.logger.info('Get NTP time')
                 logging._startup_time = ntptime.time() - time.time()
+                self._logger.info('Get NTP time')
             except:
                 pass
 
@@ -231,11 +231,11 @@ class Service(BaseService):
             if service == '__init__.py' or service.startswith('.'):
                 continue
 
-            self.logger.info('Check for updates to %s' % service)
+            self._logger.info('Check for updates to %s' % service)
             service_env = get_env(service)
 
             if 'GITHUB_URL' in service_env.keys():
-                self.logger.info('GITHUB_URL=%s' % service_env['GITHUB_URL'])
+                self._logger.info('GITHUB_URL=%s' % service_env['GITHUB_URL'])
                 remote_module_path = service_env['PYTHON_MODULE_PATH'] if 'PYTHON_MODULE_PATH' in service_env else ''
                 o = OTAUpdater(service_env['GITHUB_URL'], module_path='services/%s' % service,
                                remote_module_path=remote_module_path)
@@ -247,12 +247,14 @@ class Service(BaseService):
                         reboot_flag = True
                     gc.collect()                    
                 except Exception as e:
-                    self.logger.error("Couldn't get update info. %s" % repr(e))
+                    self._logger.error("Couldn't get update info. %s" % repr(e))
+                    sys.print_exception(e, self._log_stream)
             else:
-                self.logger.error('No env defined for %s' % self.name)
+                self._logger.error('No env defined for %s' % self.name)
+                sys.print_exception(e, self._log_stream)
 
         if reboot_flag:
-            self.logger.info('Updates installed. Rebooting...')
+            self._logger.info('Updates installed. Rebooting...')
             machine.reset()
 
     def _init_services(self):
@@ -265,15 +267,16 @@ class Service(BaseService):
                 if service == 'supervisor':
                     self._services[service] = self
                 else:
-                    # create new service
+                    # Create new service
                     exec('import %s' % service, locals())
                     self._services[service] = locals()[service].Service()
-                self.logger.info('Initialized %s %s' % (self._services[service].name,
+                self._logger.info('Initialized %s %s' % (self._services[service].name,
                                              self._services[service].version))
             except Exception as e:
-                self.logger.error('Failed to initialize %s: %s' % (service, repr(e)))
+                self._logger.error('Failed to initialize %s: %s' % (service, repr(e)))
+                sys.print_exception(e, self._log_stream)
 
-        self.logger.info('Start asyncio background thread.')
+        self._logger.info('Start asyncio background thread.')
 
         # start the asyncio loop in a background thread
         _thread.start_new_thread(self._loop.run_forever, tuple())
@@ -292,7 +295,7 @@ class Service(BaseService):
 
     # This function runs continuously
     async def loop(self):
-        self.logger.debug('state=%s' % self.state)
+        self._logger.debug('state=%s' % self.state)
 
         # Keep wifi and mqtt connections alive
         try:
@@ -303,6 +306,6 @@ class Service(BaseService):
             self._mqtt_connect()
 
         gc.collect()
-        self.logger.info('gc.mem_free()=%s' % gc.mem_free())
+        self._logger.info('gc.mem_free()=%s' % gc.mem_free())
 
         await asyncio.sleep(60)
