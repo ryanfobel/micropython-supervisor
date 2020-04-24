@@ -22,7 +22,8 @@ except OSError:
 
 
 wifi = network.WLAN(network.STA_IF)
-
+_command_queue = []
+_startup_time = None
 
 def get_env(module_name):
     try:
@@ -124,6 +125,8 @@ class MQTTStream(io.IOBase):
 
 class BaseService():
     _logger = None
+    _methods = None
+    _vars = None
 
     def __init__(self):
         self.name = self.__class__.__module__.split('.')[-1]
@@ -132,6 +135,15 @@ class BaseService():
         self._task = self.main()
         self._asyncio_loop.create_task(self._task)
         type(self)._logger = logging.getLogger(self.name)
+
+        # Inspect class to get methods and members
+        type(self)._methods = [x for x in dir(self.__class__)
+                               if eval('callable(%s.Service.%s)' % 
+                                       (self.name, x))
+                                    and not x.startswith('_')]
+        type(self)._vars = [x for x in dir(self.__class__)
+                            if x not in self._methods
+                                and not x.startswith('_')]
 
     @property
     def state(self):
@@ -207,10 +219,12 @@ class Service(BaseService):
                                user=MQTT_USER,
                                password=MQTT_PASSWORD)
 
+        self.mqtt.set_callback(self._mqtt_callback)
+
     def _init_logging(self):
         LOG_LOCALLY = env['LOG_LOCALLY'] if 'LOG_LOCALLY' in env.keys() else True
         self._log_stream = MQTTStream(self.mqtt,
-                                      '%s/logging' % self.hardware_id,
+                                      self.hardware_id,
                                       LOG_LOCALLY)
 
         self._asyncio_loop.create_task(self._log_stream._process_log_queue())
@@ -230,18 +244,43 @@ class Service(BaseService):
 
         self._asyncio_loop.create_task(self._process_mqtt_messages())
 
+    @staticmethod
+    def _mqtt_callback(topic, message):
+        topic_path = topic.decode('utf-8').split('/')[1:]
+        service, channel = topic_path
+        
+        # Command router
+        if channel == 'commands':
+            message = json.loads(message)
+            _command_queue.append((service, message))
 
     async def _process_mqtt_messages(self):
         while True:
-            if self.state == 'running':
-                try:
-                    self.mqtt.check_msg()
-                except:
-                    pass
-                await asyncio.sleep(0.1)
-            else:
-                await asyncio.sleep(1)
-            
+            try:
+                self.mqtt.check_msg()
+            except:
+                pass
+            await asyncio.sleep(0.1)
+
+            while len(_command_queue):
+                service, message = _command_queue.pop(0)
+                args = message['args'] if 'args' in message.keys() else ''
+                command = 'service.%s(%s)' % (message['command'], args)
+                response = {'token': message['token']}
+
+                if message['command'] in self._services[service]._methods:
+                    try:
+                        response['response'] = eval(command, globals(), {'service': self._services[service]})
+                    except Exception as e:
+                        response['exception'] = repr(e)
+                        self._logger.error('Remote command ("%s") caused an exception.' % command)
+                        sys.print_exception(e, self._log_stream)
+                else:
+                    response['exception'] = 'The specified command is not available.'
+                    self._logger.error('Remote command ("%s") caused an exception.' % command)
+
+                self.mqtt.publish('%s/%s/responses' % (self.hardware_id, service), json.dumps(response))
+
             gc.collect()
 
     async def _update_ntp(self):
@@ -278,6 +317,7 @@ class Service(BaseService):
     @requires_network
     def _mqtt_connect(self):
         self.mqtt.connect()
+        self.mqtt.subscribe('%s/#' % self.hardware_id)
 
     @requires_network
     def _get_updates(self):
