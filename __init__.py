@@ -266,7 +266,11 @@ class Service(BaseService):
                 service, message = _command_queue.pop(0)
                 args = message['args'] if 'args' in message.keys() else ''
                 command = 'service.%s(%s)' % (message['command'], args)
-                response = {'token': message['token']}
+                
+                # Include `command`, `token`, and `args`, in the response
+                response = {'command': message['command'],
+                            'token': message['token'],
+                            'args': args}
 
                 if message['command'] in self._services[service]._methods:
                     try:
