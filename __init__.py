@@ -25,9 +25,12 @@ wifi = network.WLAN(network.STA_IF)
 _command_queue = []
 _startup_time = None
 
-def get_env(module_name):
+def get_env(module_name=None):
     try:
-        return json.load(open('envs/%s/env.json' % module_name.split('.')[-1], 'r'))
+        if module_name:
+            return json.load(open('envs/%s/env.json' % module_name.split('.')[-1], 'r'))
+        else:
+            return env
     except OSError:
         return {}
 
@@ -135,7 +138,7 @@ class BaseService():
         self._task = self.main()
         self._asyncio_loop.create_task(self._task)
         type(self)._logger = logging.getLogger(self.name)
-
+        
         # Inspect class to get methods and members
         type(self)._methods = [x for x in dir(self.__class__)
                                if eval('callable(%s.Service.%s)' % 
@@ -178,6 +181,21 @@ class BaseService():
         lock = _thread.allocate_lock()
         with lock:
             self._state = 'stopped'
+    
+    def get_env(self, module=None):
+        return get_env(module)
+
+    def set_env(self, new_env, module=None):
+        with open('envs/%s/env.json' % module, 'w') as f:
+            f.write(json.dumps(new_env))
+        return self.get_env(module)
+
+    def update_env(self, update_env, module=None):
+        env_dict = get_env(module)
+        env_dict.update(update_env)
+        with open('envs/%s/env.json' % module, 'w') as f:
+            f.write(json.dumps(env_dict))
+        return self.get_env(module)
 
     async def main(self):
         while True:
@@ -359,6 +377,8 @@ class Service(BaseService):
             machine.reset()
 
     def _init_services(self):
+        self._logger.info('root environment = %s' % (json.dumps(self.get_env())))
+        
         # Get a list of all services
         for service in os.listdir('services'):
             if service == '__init__.py' or service.startswith('.'):
@@ -373,6 +393,8 @@ class Service(BaseService):
                     self._services[service] = locals()[service].Service()
                 self._logger.info('Initialized %s %s' % (self._services[service].name,
                                              self._services[service].version))
+                service_env = self.get_env(service)
+                self._logger.info('%s environment = %s' % (service, json.dumps(service_env)))
             except Exception as e:
                 self._logger.error('Failed to initialize %s: %s' % (service, repr(e)))
                 sys.print_exception(e, self._log_stream)
