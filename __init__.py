@@ -386,6 +386,9 @@ class Service(BaseService):
     def status(self):
         return {name: (service.state, service.version) for name, service in self._services.items()}
 
+    def reset(self):
+        machine.reset()
+
     def stop_all_services(self):
         for service in self._services.values():
             service.stop()
